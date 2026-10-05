@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Segoe UI", "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: "Segoe UI", "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(212, 175, 120, 0.18), transparent 55%),
+    radial-gradient(900px 500px at 100% 0%, rgba(120, 150, 200, 0.12), transparent 50%),
+    linear-gradient(180deg, #f7f4ef 0%, #f0ebe3 40%, #e8e4dc 100%);
+  color: #1c1917;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+*:focus-visible {
+  outline: 2px solid #b45309;
+  outline-offset: 2px;
+}
+
+.glass {
+  background: rgba(255, 252, 248, 0.78);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.8) inset,
+    0 12px 40px rgba(28, 25, 23, 0.06);
+}
+
+.card-soft {
+  background: #fffcf8;
+  border: 1px solid rgba(28, 25, 23, 0.06);
+  box-shadow: 0 8px 30px rgba(28, 25, 23, 0.04);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #1c1917 0%, #44403c 100%);
+  color: #fafaf9;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  box-shadow: 0 8px 24px rgba(28, 25, 23, 0.18);
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(28, 25, 23, 0.22);
+}
+
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-accent {
+  background: linear-gradient(135deg, #b45309 0%, #d97706 55%, #f59e0b 100%);
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(180, 83, 9, 0.25);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn-accent:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(180, 83, 9, 0.3);
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, #9f1239 0%, #e11d48 100%);
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(159, 18, 57, 0.22);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn-danger:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.progress-track {
+  background: rgba(28, 25, 23, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  background: linear-gradient(90deg, #b45309, #f59e0b);
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
