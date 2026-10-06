@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://duplicate-image-finder-two.vercel.app/sitemap.xml
