@@ -21,12 +21,26 @@ Output: `dist/`
 
 ## Deploy to Vercel (free)
 
+### Important project settings (if build fails with `vite: command not found`)
+
+In Vercel → Project → **Settings → General / Build & Development Settings**:
+
+| Setting | Value |
+|---|---|
+| Framework Preset | **Other** (not Vite) |
+| Build Command | `npm run build` |
+| Output Directory | `dist` |
+| Install Command | `npm install` |
+| Root Directory | `.` (repository root) |
+
+Do **not** set Build Command to bare `vite build`.
+
 ### Option A — Vercel website
 
 1. Push this project to GitHub (public or private repo).
 2. Go to [https://vercel.com](https://vercel.com) → Sign up / Log in.
 3. **Add New Project** → Import the GitHub repo.
-4. Framework: Vite (auto).
+4. Framework: **Other** (or leave blank).
 5. Build command: `npm run build`
 6. Output directory: `dist`
 7. Click **Deploy**.

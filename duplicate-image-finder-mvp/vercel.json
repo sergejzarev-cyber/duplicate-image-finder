@@ -1,22 +1,13 @@
 {
-  "installCommand": "npm install",
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npm install --include=dev",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": null,
   "rewrites": [
     {
-      "source": "/((?!google400ad3b54f5d459e\\.html|robots\\.txt|sitemap\\.xml).*)",
+      "source": "/((?!google400ad3b54f5d459e\\.html|robots\\.txt|sitemap\\.xml|images/).*)",
       "destination": "/index.html"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" }
-      ]
     }
   ]
 }
