@@ -56,20 +56,29 @@ export function recommendKeep(files: ImageFile[], rule: SelectionRule): ImageFil
   return sorted[0];
 }
 
-/** Hamming distance between two hex dHash strings (16 hex chars = 64 bit). */
+/** Hamming distance between hex strings (any length). */
 export function hammingDistanceHex(a: string, b: string): number {
   if (!a || !b) return 64;
   const n = Math.min(a.length, b.length);
   let dist = 0;
-  // process nibble by nibble for robustness if lengths differ slightly
   for (let i = 0; i < n; i++) {
     let x = parseInt(a[i], 16) ^ parseInt(b[i], 16);
+    // count bits in nibble
     x = x - ((x >>> 1) & 0x5);
     x = (x & 0x3) + ((x >>> 2) & 0x3);
     dist += x & 0xf;
   }
   dist += Math.abs(a.length - b.length) * 4;
   return dist;
+}
+
+/** Combined distance: min of dHash and pHash distances (more recall). */
+export function similarDistance(a: ImageFile, b: ImageFile): number {
+  const distances: number[] = [];
+  if (a.dhash && b.dhash) distances.push(hammingDistanceHex(a.dhash, b.dhash));
+  if (a.phash && b.phash) distances.push(hammingDistanceHex(a.phash, b.phash));
+  if (distances.length === 0) return 64;
+  return Math.min(...distances);
 }
 
 class UnionFind {
@@ -100,35 +109,25 @@ class UnionFind {
 }
 
 /**
- * Cluster similar images by dHash using Union-Find.
- * Compares each pair with early exits; fine for a few thousand images in-browser.
- * Files already in exact groups should be excluded by caller.
+ * Cluster similar images using dHash + pHash (min distance) and Union-Find.
  */
 export function buildSimilarGroups(
   files: ImageFile[],
   threshold: number,
   selectionRule: SelectionRule
 ): DuplicateGroup[] {
-  const withHash = files.filter((f) => typeof f.dhash === 'string' && f.dhash.length >= 16 && !f.broken);
+  const withHash = files.filter(
+    (f) => !f.broken && ((f.dhash && f.dhash.length >= 16) || (f.phash && f.phash.length >= 16))
+  );
   const n = withHash.length;
   if (n < 2) return [];
 
   const uf = new UnionFind(n);
-  // pair max distance inside component (approx via edge max)
-  const edgeMax = new Map<string, number>();
 
   for (let i = 0; i < n; i++) {
-    const hi = withHash[i].dhash!;
     for (let j = i + 1; j < n; j++) {
-      const d = hammingDistanceHex(hi, withHash[j].dhash!);
-      if (d <= threshold) {
-        uf.union(i, j);
-        const ra = uf.find(i);
-        const rb = uf.find(j);
-        // after union root may change — store under both temporary keys then normalize later
-        const key = ra < rb ? `${ra}-${rb}` : `${rb}-${ra}`;
-        edgeMax.set(key, Math.max(edgeMax.get(key) ?? 0, d));
-      }
+      const d = similarDistance(withHash[i], withHash[j]);
+      if (d <= threshold) uf.union(i, j);
     }
   }
 
@@ -145,34 +144,55 @@ export function buildSimilarGroups(
     if (indices.length < 2) continue;
     const cluster = indices.map((i) => withHash[i]);
 
-    // compute real max pairwise distance inside cluster (only small clusters usually)
     let maxDist = 0;
+    let minDist = 64;
     for (let a = 0; a < indices.length; a++) {
       for (let b = a + 1; b < indices.length; b++) {
-        const d = hammingDistanceHex(withHash[indices[a]].dhash!, withHash[indices[b]].dhash!);
+        const d = similarDistance(withHash[indices[a]], withHash[indices[b]]);
         if (d > maxDist) maxDist = d;
+        if (d < minDist) minDist = d;
       }
     }
 
     const seed = cluster[0];
     groups.push({
-      id: `similar-${seed.dhash}-${cluster.length}-${seed.id}`,
+      id: `similar-${seed.dhash ?? seed.phash}-${cluster.length}-${seed.id}`,
       type: 'similar',
-      hash: seed.dhash!,
+      hash: seed.dhash ?? seed.phash ?? 'unknown',
       files: cluster,
       recommendation: recommendKeep(cluster, selectionRule),
       maxDistance: maxDist,
     });
   }
 
-  groups.sort((a, b) => b.files.length - a.files.length || (a.maxDistance ?? 0) - (b.maxDistance ?? 0));
+  groups.sort(
+    (a, b) => b.files.length - a.files.length || (a.maxDistance ?? 0) - (b.maxDistance ?? 0)
+  );
   return groups;
 }
 
-/** Human label for similarity quality */
 export function similarityLabel(maxDistance: number | undefined, threshold: number): string {
   if (maxDistance == null) return '';
   if (maxDistance <= Math.max(1, Math.floor(threshold * 0.35))) return 'very-close';
   if (maxDistance <= Math.max(2, Math.floor(threshold * 0.7))) return 'close';
   return 'loose';
+}
+
+/** Debug helper: pairwise min distances for console */
+export function debugSimilarPairs(files: ImageFile[], limit = 20): string[] {
+  const list = files.filter((f) => f.dhash || f.phash);
+  const lines: string[] = [];
+  for (let i = 0; i < list.length && lines.length < limit; i++) {
+    for (let j = i + 1; j < list.length && lines.length < limit; j++) {
+      const d = similarDistance(list[i], list[j]);
+      lines.push(
+        `${list[i].name} ↔ ${list[j].name}: distance=${d} (dHash ${
+          list[i].dhash && list[j].dhash ? hammingDistanceHex(list[i].dhash!, list[j].dhash!) : '-'
+        }, pHash ${
+          list[i].phash && list[j].phash ? hammingDistanceHex(list[i].phash!, list[j].phash!) : '-'
+        })`
+      );
+    }
+  }
+  return lines;
 }

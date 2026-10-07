@@ -10,7 +10,8 @@ import type {
 } from './types';
 import { collectFiles, filesFromFileList } from './fs/scanner';
 import { openDirectoryPicker } from './fs/access';
-import { buildExactGroups, buildSimilarGroups, recommendKeep, similarityLabel } from './core/duplicates';
+import { buildExactGroups, buildSimilarGroups, recommendKeep, similarityLabel, debugSimilarPairs } from './core/duplicates';
+import { computeImageFingerprints } from './core/imageHash';
 import { useI18n } from './i18n/useI18n';
 import JSZip from 'jszip';
 import { FeedbackModal } from './ui/FeedbackModal';
@@ -57,51 +58,8 @@ async function sha256Main(buffer: ArrayBuffer): Promise<string> {
     .join('');
 }
 
-async function dhashMain(
-  buffer: ArrayBuffer
-): Promise<{ width: number; height: number; dhash: string }> {
-  const blob = new Blob([buffer]);
-  const bitmap = await createImageBitmap(blob);
-  try {
-    const width = bitmap.width;
-    const height = bitmap.height;
-    if (width < 2 || height < 2) throw new Error('image too small');
-
-    const canvas = document.createElement('canvas');
-    canvas.width = 9;
-    canvas.height = 8;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) throw new Error('canvas');
-
-    const srcSize = Math.min(width, height);
-    const sx = Math.floor((width - srcSize) / 2);
-    const sy = Math.floor((height - srcSize) / 2);
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, 9, 8);
-    ctx.drawImage(bitmap, sx, sy, srcSize, srcSize, 0, 0, 9, 8);
-
-    const { data } = ctx.getImageData(0, 0, 9, 8);
-    const gray = new Float32Array(9 * 8);
-    for (let i = 0, p = 0; i < data.length; i += 4, p++) {
-      gray[p] = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-    }
-
-    let bits = '';
-    for (let y = 0; y < 8; y++) {
-      for (let x = 0; x < 8; x++) {
-        bits += gray[y * 9 + x] < gray[y * 9 + x + 1] ? '1' : '0';
-      }
-    }
-    let hex = '';
-    for (let i = 0; i < 64; i += 4) {
-      hex += parseInt(bits.slice(i, i + 4), 2).toString(16);
-    }
-    return { width, height, dhash: hex };
-  } finally {
-    bitmap.close();
-  }
+async function fingerprintsMain(buffer: ArrayBuffer) {
+  return computeImageFingerprints(buffer);
 }
 
 export default function App() {
@@ -110,7 +68,7 @@ export default function App() {
   const [mode, setMode] = useState<'fs' | 'fallback'>('fs');
   const [includeSubfolders, setIncludeSubfolders] = useState(false);
   const [enableSimilar, setEnableSimilar] = useState(true);
-  const [hammingThreshold, setHammingThreshold] = useState(5);
+  const [hammingThreshold, setHammingThreshold] = useState(12);
   const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | undefined>();
   const [folderName, setFolderName] = useState('');
   const [files, setFiles] = useState<ImageFile[]>([]);
@@ -210,7 +168,7 @@ export default function App() {
         const extra: Partial<ImageFile> = { sha256 };
         if (computeDhash) {
           try {
-            Object.assign(extra, await dhashMain(buffer));
+            Object.assign(extra, await fingerprintsMain(buffer));
           } catch {
             extra.broken = true;
             extra.error = 'broken image';
@@ -236,6 +194,7 @@ export default function App() {
             resolve({
               sha256: msg.sha256,
               dhash: msg.dhash,
+              phash: msg.phash,
               width: msg.width,
               height: msg.height,
               broken: msg.broken,
@@ -373,8 +332,21 @@ export default function App() {
 
       let similar: DuplicateGroup[] = [];
       if (enableSimilar) {
-        const candidates = enriched.filter((f) => f.dhash && !inExact.has(f.id) && !f.broken);
+        const candidates = enriched.filter(
+          (f) => (f.dhash || f.phash) && !inExact.has(f.id) && !f.broken
+        );
         similar = buildSimilarGroups(candidates, hammingThreshold, selectionRule);
+        // Helpful diagnostics in DevTools
+        const pairs = debugSimilarPairs(candidates, 30);
+        console.log(
+          '[similar] threshold=',
+          hammingThreshold,
+          'candidates=',
+          candidates.length,
+          'groups=',
+          similar.length
+        );
+        console.log('[similar] pairwise distances:\n' + pairs.join('\n'));
       }
 
       const sizeCount = new Map<number, number>();
@@ -900,7 +872,7 @@ export default function App() {
                     <input
                       type="range"
                       min={1}
-                      max={15}
+                      max={20}
                       value={hammingThreshold}
                       onChange={(e) => {
                         const v = Number(e.target.value);
@@ -908,7 +880,7 @@ export default function App() {
                         const inExact = new Set<string>();
                         for (const g of exactGroups) for (const f of g.files) inExact.add(f.id);
                         const candidates = files.filter(
-                          (f) => f.dhash && !inExact.has(f.id) && !f.broken
+                          (f) => (f.dhash || f.phash) && !inExact.has(f.id) && !f.broken
                         );
                         setSimilarGroups(buildSimilarGroups(candidates, v, selectionRule));
                       }}

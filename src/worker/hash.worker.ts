@@ -11,6 +11,7 @@ export type OutMessage =
       path: string;
       sha256?: string;
       dhash?: string;
+      phash?: string;
       width?: number;
       height?: number;
       broken?: boolean;
@@ -32,6 +33,7 @@ self.onmessage = async (e: MessageEvent<InMessage>) => {
       let width: number | undefined;
       let height: number | undefined;
       let dhash: string | undefined;
+      let phash: string | undefined;
       let broken = false;
       let error: string | undefined;
 
@@ -41,6 +43,7 @@ self.onmessage = async (e: MessageEvent<InMessage>) => {
           width = meta.width;
           height = meta.height;
           dhash = meta.dhash;
+          phash = meta.phash;
         } catch (err: unknown) {
           broken = true;
           error = err instanceof Error ? err.message : 'broken image';
@@ -53,6 +56,7 @@ self.onmessage = async (e: MessageEvent<InMessage>) => {
         path: msg.path,
         sha256: sha,
         dhash,
+        phash,
         width,
         height,
         broken,
@@ -75,62 +79,94 @@ async function sha256(buffer: ArrayBuffer): Promise<string> {
     .join('');
 }
 
-/**
- * Difference hash (dHash):
- * 1) decode image
- * 2) draw into 9×8 grayscale canvas (cover + center crop to reduce letterboxing noise)
- * 3) compare each pixel to its right neighbor → 64 bits
- */
-async function analyzeImage(
-  buffer: ArrayBuffer
-): Promise<{ width: number; height: number; dhash: string }> {
+async function analyzeImage(buffer: ArrayBuffer): Promise<{
+  width: number;
+  height: number;
+  dhash: string;
+  phash: string;
+}> {
   const blob = new Blob([buffer]);
+  // Try both orientations if EXIF orientation matters — createImageBitmap handles most cases
   const bitmap = await createImageBitmap(blob);
   try {
     const width = bitmap.width;
     const height = bitmap.height;
     if (width < 2 || height < 2) throw new Error('image too small');
 
-    const canvas = new OffscreenCanvas(9, 8);
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) throw new Error('2d context unavailable');
+    // dHash via cover-fit 9x8
+    const dCanvas = new OffscreenCanvas(9, 8);
+    const dctx = dCanvas.getContext('2d', { willReadFrequently: true });
+    if (!dctx) throw new Error('2d context unavailable');
+    drawCover(dctx, bitmap, 9, 8);
+    const dGray = toGray(dctx.getImageData(0, 0, 9, 8).data, 72);
+    const dhash = horizontalDHash(dGray, 9, 8);
 
-    // center-crop to square-ish content then scale → more stable across aspect ratios
-    const srcSize = Math.min(width, height);
-    const sx = Math.floor((width - srcSize) / 2);
-    const sy = Math.floor((height - srcSize) / 2);
+    // average hash 8x8 (robust to compression)
+    const pCanvas = new OffscreenCanvas(8, 8);
+    const pctx = pCanvas.getContext('2d', { willReadFrequently: true });
+    if (!pctx) throw new Error('2d context unavailable');
+    drawCover(pctx, bitmap, 8, 8);
+    const pGray = toGray(pctx.getImageData(0, 0, 8, 8).data, 64);
+    const phash = averageHash(pGray);
 
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, 9, 8);
-    ctx.drawImage(bitmap, sx, sy, srcSize, srcSize, 0, 0, 9, 8);
-
-    const { data } = ctx.getImageData(0, 0, 9, 8);
-    const gray = new Float32Array(9 * 8);
-    for (let i = 0, p = 0; i < data.length; i += 4, p++) {
-      // Rec. 601 luma
-      gray[p] = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-    }
-
-    let bits = '';
-    for (let y = 0; y < 8; y++) {
-      for (let x = 0; x < 8; x++) {
-        const left = gray[y * 9 + x];
-        const right = gray[y * 9 + x + 1];
-        bits += left < right ? '1' : '0';
-      }
-    }
-
-    let hex = '';
-    for (let i = 0; i < 64; i += 4) {
-      hex += parseInt(bits.slice(i, i + 4), 2).toString(16);
-    }
-
-    return { width, height, dhash: hex };
+    return { width, height, dhash, phash };
   } finally {
     bitmap.close();
   }
+}
+
+function drawCover(
+  ctx: OffscreenCanvasRenderingContext2D,
+  bitmap: ImageBitmap,
+  tw: number,
+  th: number
+) {
+  const width = bitmap.width;
+  const height = bitmap.height;
+  const scale = Math.max(tw / width, th / height);
+  const sw = tw / scale;
+  const sh = th / scale;
+  const sx = (width - sw) / 2;
+  const sy = (height - sh) / 2;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.clearRect(0, 0, tw, th);
+  ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, tw, th);
+}
+
+function toGray(data: Uint8ClampedArray, n: number): Float32Array {
+  const g = new Float32Array(n);
+  for (let i = 0, p = 0; p < n; i += 4, p++) {
+    g[p] = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+  }
+  return g;
+}
+
+function horizontalDHash(gray: Float32Array, w: number, h: number): string {
+  let bits = '';
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w - 1; x++) {
+      bits += gray[y * w + x] < gray[y * w + x + 1] ? '1' : '0';
+    }
+  }
+  return bitsToHex(bits);
+}
+
+function averageHash(gray: Float32Array): string {
+  let sum = 0;
+  for (let i = 0; i < gray.length; i++) sum += gray[i];
+  const avg = sum / gray.length;
+  let bits = '';
+  for (let i = 0; i < gray.length; i++) bits += gray[i] >= avg ? '1' : '0';
+  return bitsToHex(bits);
+}
+
+function bitsToHex(bits: string): string {
+  let hex = '';
+  for (let i = 0; i < bits.length; i += 4) {
+    hex += parseInt(bits.slice(i, i + 4).padEnd(4, '0'), 2).toString(16);
+  }
+  return hex;
 }
 
 export {};

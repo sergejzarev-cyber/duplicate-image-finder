@@ -11,6 +11,8 @@ export interface ImageFile {
   height?: number;
   sha256?: string;
   dhash?: string;
+  /** DCT average hash (pHash-like), hex 16 chars */
+  phash?: string;
   broken?: boolean;
   error?: string;
 }
