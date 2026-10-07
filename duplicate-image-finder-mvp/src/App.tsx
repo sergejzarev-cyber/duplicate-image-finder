@@ -10,7 +10,7 @@ import type {
 } from './types';
 import { collectFiles, filesFromFileList } from './fs/scanner';
 import { openDirectoryPicker } from './fs/access';
-import { buildExactGroups, buildSimilarGroups, recommendKeep } from './core/duplicates';
+import { buildExactGroups, buildSimilarGroups, recommendKeep, similarityLabel } from './core/duplicates';
 import { useI18n } from './i18n/useI18n';
 import JSZip from 'jszip';
 import { FeedbackModal } from './ui/FeedbackModal';
@@ -28,7 +28,10 @@ import {
   ScanSearch,
   Layers,
   MessageSquareHeart,
+  Heart,
 } from 'lucide-react';
+import { DONATE_URL } from './config';
+import { SupportModal } from './ui/SupportModal';
 
 type AppState = 'idle' | 'scanning' | 'results' | 'deleting' | 'report';
 
@@ -60,28 +63,42 @@ async function dhashMain(
   const blob = new Blob([buffer]);
   const bitmap = await createImageBitmap(blob);
   try {
+    const width = bitmap.width;
+    const height = bitmap.height;
+    if (width < 2 || height < 2) throw new Error('image too small');
+
     const canvas = document.createElement('canvas');
     canvas.width = 9;
     canvas.height = 8;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) throw new Error('canvas');
-    ctx.drawImage(bitmap, 0, 0, 9, 8);
+
+    const srcSize = Math.min(width, height);
+    const sx = Math.floor((width - srcSize) / 2);
+    const sy = Math.floor((height - srcSize) / 2);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, 9, 8);
+    ctx.drawImage(bitmap, sx, sy, srcSize, srcSize, 0, 0, 9, 8);
+
     const { data } = ctx.getImageData(0, 0, 9, 8);
+    const gray = new Float32Array(9 * 8);
+    for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+      gray[p] = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+    }
+
     let bits = '';
     for (let y = 0; y < 8; y++) {
       for (let x = 0; x < 8; x++) {
-        const i = (y * 9 + x) * 4;
-        const j = (y * 9 + x + 1) * 4;
-        const g1 = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-        const g2 = data[j] * 0.299 + data[j + 1] * 0.587 + data[j + 2] * 0.114;
-        bits += g1 < g2 ? '1' : '0';
+        bits += gray[y * 9 + x] < gray[y * 9 + x + 1] ? '1' : '0';
       }
     }
     let hex = '';
     for (let i = 0; i < 64; i += 4) {
       hex += parseInt(bits.slice(i, i + 4), 2).toString(16);
     }
-    return { width: bitmap.width, height: bitmap.height, dhash: hex };
+    return { width, height, dhash: hex };
   } finally {
     bitmap.close();
   }
@@ -110,6 +127,7 @@ export default function App() {
   const [report, setReport] = useState<RemoveReport | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [showSupport, setShowSupport] = useState(false);
   const [statusNote, setStatusNote] = useState('');
   const workerRef = useRef<Worker | null>(null);
   const scanSignal = useRef<AbortController | null>(null);
@@ -595,6 +613,16 @@ export default function App() {
               <ShieldCheck className="h-3.5 w-3.5" />
               {t('privacyBadge')}
             </span>
+            {Boolean(DONATE_URL?.trim()) && (
+              <button
+                type="button"
+                onClick={() => setShowSupport(true)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50/90 px-3 py-1.5 text-[11px] font-semibold text-rose-800 shadow-sm hover:bg-rose-50"
+              >
+                <Heart className="h-3.5 w-3.5" />
+                {t('support')}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setShowFeedback(true)}
@@ -699,9 +727,12 @@ export default function App() {
                         onChange={(e) => setEnableSimilar(e.target.checked)}
                         className="h-4 w-4 rounded border-slate-300 text-blue-700 focus:ring-blue-600"
                       />
-                      {t('similarImages')}
+                      {t('similarEnabled')}
                     </label>
                   </div>
+                  {enableSimilar && (
+                    <p className="mt-3 max-w-xl text-xs leading-relaxed text-slate-500">{t('similarHint')}</p>
+                  )}
 
                   {statusNote && (
                     <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/95 px-4 py-3 text-sm text-amber-900">
@@ -857,35 +888,41 @@ export default function App() {
             </section>
 
             {enableSimilar && (
-              <section className="card-soft flex flex-wrap items-center justify-between gap-4 rounded-[24px] p-5">
-                <div>
-                  <div className="text-sm font-semibold text-stone-900">{t('similarImages')}</div>
-                  <div className="text-xs text-stone-500">dHash · Hamming ≤ {hammingThreshold}</div>
+              <section className="card-soft rounded-[24px] p-5">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">{t('similarImages')}</div>
+                    <div className="mt-1 text-xs text-slate-500">{t('similarThreshold')} · dHash · Hamming ≤ {hammingThreshold}</div>
+                    <p className="mt-2 max-w-xl text-xs leading-relaxed text-slate-500">{t('similarHint')}</p>
+                  </div>
+                  <label className="flex items-center gap-3 text-sm text-slate-600">
+                    <span className="text-xs font-medium text-slate-400">{t('similarStrict')}</span>
+                    <input
+                      type="range"
+                      min={1}
+                      max={15}
+                      value={hammingThreshold}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        setHammingThreshold(v);
+                        const inExact = new Set<string>();
+                        for (const g of exactGroups) for (const f of g.files) inExact.add(f.id);
+                        const candidates = files.filter(
+                          (f) => f.dhash && !inExact.has(f.id) && !f.broken
+                        );
+                        setSimilarGroups(buildSimilarGroups(candidates, v, selectionRule));
+                      }}
+                      className="w-44 accent-blue-600"
+                    />
+                    <span className="text-xs font-medium text-slate-400">{t('similarLoose')}</span>
+                    <span className="rounded-full bg-slate-900 px-2.5 py-0.5 text-xs font-semibold text-white">
+                      ≤{hammingThreshold}
+                    </span>
+                  </label>
                 </div>
-                <label className="flex items-center gap-3 text-sm text-stone-600">
-                  <span>1</span>
-                  <input
-                    type="range"
-                    min={1}
-                    max={15}
-                    value={hammingThreshold}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      setHammingThreshold(v);
-                      const inExact = new Set<string>();
-                      for (const g of exactGroups) for (const f of g.files) inExact.add(f.id);
-                      const candidates = files.filter(
-                        (f) => f.dhash && !inExact.has(f.id) && !f.broken
-                      );
-                      setSimilarGroups(buildSimilarGroups(candidates, v, selectionRule));
-                    }}
-                    className="w-40 accent-amber-600"
-                  />
-                  <span>15</span>
-                  <span className="rounded-full bg-stone-900 px-2 py-0.5 text-xs text-white">
-                    ≤{hammingThreshold}
-                  </span>
-                </label>
+                {similarGroups.length === 0 && exactGroups.length >= 0 && (
+                  <p className="mt-3 text-xs text-amber-800">{t('similarEmpty')}</p>
+                )}
               </section>
             )}
 
@@ -937,13 +974,11 @@ export default function App() {
 
                 {similarGroups.length > 0 && (
                   <div className="space-y-4">
-                    <h3 className="text-xl font-semibold text-stone-900">
+                    <h3 className="text-xl font-semibold text-slate-900">
                       {t('similarImages')}{' '}
-                      <span className="text-stone-400">({similarGroups.length})</span>
+                      <span className="text-slate-400">({similarGroups.length})</span>
                     </h3>
-                    <p className="text-xs text-amber-800">
-                      ⚠ Similar ≠ identical — review before deleting.
-                    </p>
+                    <p className="text-xs text-amber-800">⚠ {t('similarReview')}</p>
                     {similarGroups.map((group, idx) => (
                       <GroupCard
                         key={group.id}
@@ -952,6 +987,7 @@ export default function App() {
                         t={t}
                         getThumb={getThumb}
                         onKeep={(fi) => handleSetKeepGroup('similar', idx, fi)}
+                        similarity={similarityLabel(group.maxDistance, hammingThreshold)}
                       />
                     ))}
                   </div>
@@ -1022,14 +1058,26 @@ export default function App() {
                   <p className="mt-1 text-sm text-stone-500">{t('subtitle')}</p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={handleReset}
-                className="btn-primary inline-flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold"
-              >
-                <Home className="h-4 w-4" />
-                {t('newScan')}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                {Boolean(DONATE_URL?.trim()) && (
+                  <button
+                    type="button"
+                    onClick={() => setShowSupport(true)}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-800 hover:bg-rose-100"
+                  >
+                    <Heart className="h-4 w-4" />
+                    {t('support')}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="btn-primary inline-flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold"
+                >
+                  <Home className="h-4 w-4" />
+                  {t('newScan')}
+                </button>
+              </div>
             </div>
             <div className="mb-6 grid gap-4 sm:grid-cols-3">
               <div className="rounded-2xl border border-stone-100 bg-white p-5">
@@ -1078,6 +1126,7 @@ export default function App() {
       </main>
 
       <FeedbackModal open={showFeedback} onClose={() => setShowFeedback(false)} t={t} lang={lang} />
+      <SupportModal open={showSupport} onClose={() => setShowSupport(false)} t={t} />
 
       {showConfirm && (
         <div
@@ -1127,29 +1176,49 @@ function GroupCard({
   t,
   getThumb,
   onKeep,
+  similarity,
 }: {
   group: DuplicateGroup;
   idx: number;
   t: (k: string) => string;
   getThumb: (f: ImageFile) => string | null;
   onKeep: (fileIndex: number) => void;
+  similarity?: string;
 }) {
+  const simText =
+    similarity === 'very-close'
+      ? t('similarVeryClose')
+      : similarity === 'close'
+        ? t('similarClose')
+        : similarity === 'loose'
+          ? t('similarLooseMatch')
+          : '';
+
   return (
     <article className="card-soft overflow-hidden rounded-[24px]">
       <div className="flex items-center justify-between border-b border-stone-100 px-5 py-4">
         <div className="flex items-center gap-3">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-xs font-bold text-amber-800">
+          <span
+            className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${
+              group.type === 'similar' ? 'bg-violet-100 text-violet-800' : 'bg-amber-100 text-amber-800'
+            }`}
+          >
             {idx + 1}
           </span>
           <div>
-            <div className="text-sm font-semibold text-stone-900">
+            <div className="text-sm font-semibold text-slate-900">
               {group.files.length} files
               {group.maxDistance != null ? ` · Hamming ≤ ${group.maxDistance}` : ''}
+              {simText ? ` · ${simText}` : ''}
             </div>
-            <div className="font-mono text-[11px] text-stone-400">{group.hash.slice(0, 20)}…</div>
+            <div className="font-mono text-[11px] text-slate-400">{group.hash.slice(0, 20)}…</div>
           </div>
         </div>
-        <span className="rounded-full bg-stone-100 px-3 py-1 text-[11px] font-medium text-stone-500">
+        <span
+          className={`rounded-full px-3 py-1 text-[11px] font-medium ${
+            group.type === 'similar' ? 'bg-violet-100 text-violet-800' : 'bg-slate-100 text-slate-500'
+          }`}
+        >
           {group.type === 'exact' ? t('exactDuplicates') : t('similarImages')}
         </span>
       </div>
