@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npm install",
+  "buildCommand": "npx --yes vite@7.3.2 build && node scripts/copy-seo-files.mjs",
+  "outputDirectory": "dist",
+  "framework": null
+}
