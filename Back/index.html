@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <script>
+      // Ранний выбор <html lang>: сохранённый выбор → язык браузера → английский.
+      // Зеркало detectInitialLang() из src/i18n.tsx, чтобы правильный lang стоял до загрузки React.
+      try {
+        var s = localStorage.getItem("dupsweep.lang");
+        var ok = s === "ru" || s === "de" || s === "en";
+        if (!ok) {
+          var ls = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || "en"];
+          for (var i = 0; i < ls.length; i++) {
+            var b = String(ls[i]).split("-")[0].toLowerCase();
+            if (b === "ru" || b === "de" || b === "en") { s = b; ok = true; break; }
+          }
+        }
+        document.documentElement.lang = ok ? s : "en";
+      } catch (e) { document.documentElement.lang = "en"; }
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DupSweep – Doppelte Fotos finden &amp; löschen | 100% lokal im Browser</title>
+    <meta
+      name="description"
+      content="Doppelte Fotos finden und löschen – 100% lokal im Browser, ohne Upload. DupSweep findet identische & ähnliche Bilder (HEIC, JPG, PNG). Kostenlos & Open Source."
+    />
+    <meta
+      name="keywords"
+      content="doppelte Fotos finden, doppelte Fotos löschen, Duplikate finden, doppelte Bilder finden, ähnliche Fotos finden, duplicate photo finder, remove duplicate photos, поиск дубликатов фото, HEIC Duplikate"
+    />
+    <meta name="author" content="DupSweep" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://duplicate-image-finder-two.vercel.app/" />
+
+    <!-- Google Search Console: вставьте сюда verification-тег из консоли, например:
+    <meta name="google-site-verification" content="PASTE_TOKEN_HERE" /> -->
+
+    <!-- Open Graph (превью в Telegram / WhatsApp / Facebook / LinkedIn) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="DupSweep" />
+    <meta property="og:url" content="https://duplicate-image-finder-two.vercel.app/" />
+    <meta property="og:title" content="DupSweep – Doppelte Fotos finden & löschen, 100% lokal" />
+    <meta
+      property="og:description"
+      content="Identische & ähnliche Fotos finden – direkt im Browser, ohne Upload. Kostenlos & Open Source."
+    />
+    <meta property="og:image" content="https://duplicate-image-finder-two.vercel.app/og-cover.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="de_DE" />
+    <meta property="og:locale:alternate" content="ru_RU" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="DupSweep – Doppelte Fotos finden & löschen, 100% lokal" />
+    <meta
+      name="twitter:description"
+      content="Identische & ähnliche Fotos finden – direkt im Browser, ohne Upload. Kostenlos & Open Source."
+    />
+    <meta name="twitter:image" content="https://duplicate-image-finder-two.vercel.app/og-cover.jpg" />
+
+    <!-- Structured data: SoftwareApplication -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "DupSweep",
+        "url": "https://duplicate-image-finder-two.vercel.app/",
+        "applicationCategory": "MultimediaApplication",
+        "operatingSystem": "Web browser (Chrome, Edge, Opera)",
+        "browserRequirements": "Requires File System Access API for deletion; search works everywhere",
+        "inLanguage": ["en", "de", "ru"],
+        "description": "Local duplicate photo finder: identical and visually similar images, even recompressed or resized. Cleanup with confirmation. Files never leave the computer. Doppelte Fotos finden und löschen – lokal im Browser.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" }
+      }
+    </script>
+
+    <!-- Structured data: FAQ (rich results) -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Is it safe? Are my photos sent anywhere?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Safe: everything runs locally in your browser. Photos are never uploaded to a server. The source code is open on GitHub."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How do similar photos differ from exact copies?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Exact copies are files with identical content. Similar shots look the same to the eye but differ as files: recompressed, resized, or saved in another format. DupSweep finds both."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How do I restore deleted photos?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "By default nothing is erased forever: copies move to the _duplicates subfolder. Just move the files back."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Are there downsides compared to desktop apps?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Very large collections (50,000+ photos) are processed slower in the browser, and deletion only works in Chrome, Edge and Opera. Nothing to install, and photos are never uploaded."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Are iPhone photos (HEIC) supported?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. HEIC photos are automatically converted to JPEG right in your browser — for analysis only; your originals stay untouched. If a photo can't be read, convert it to JPEG and scan again."
+            }
+          }
+        ]
+      }
+    </script>
+
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231c1917'/%3E%3Cpath d='M16 7l9 5v8l-9 5-9-5v-8l9-5z' fill='none' stroke='%23fafaf9' stroke-width='2.4' stroke-linejoin='round'/%3E%3Cpath d='M7 12l9 5 9-5M16 17v8' fill='none' stroke='%23fafaf9' stroke-width='2.4' stroke-linejoin='round'/%3E%3C/svg%3E"
+    />
+    <!-- Системные шрифты: никаких внешних запросов, страница полностью автономна после загрузки -->
+    <meta name="theme-color" content="#f4f1ea" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>
+      <p style="font-family: sans-serif; padding: 2rem; text-align: center">
+        DupSweep needs JavaScript to find duplicate images locally in your browser. /
+        DupSweep benötigt JavaScript, um doppelte Bilder lokal in Ihrem Browser zu finden.
+      </p>
+    </noscript>
+    <script type="module" src="/src/entries/landing.tsx"></script>
+  </body>
+</html>
