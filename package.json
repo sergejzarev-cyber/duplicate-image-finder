@@ -1,33 +1,32 @@
 {
-  "name": "duplicate-image-finder",
+  "name": "react-vite-tailwind",
   "private": true,
-  "version": "1.0.0",
+  "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "npx vite",
-    "build": "npx --yes vite@7.3.2 build && node scripts/copy-seo-files.mjs",
-    "preview": "npx vite preview",
-    "vercel-build": "npx --yes vite@7.3.2 build && node scripts/copy-seo-files.mjs"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
-    "@tailwindcss/vite": "4.1.17",
-    "@vitejs/plugin-react": "5.1.1",
+    "@playwright/test": "^1.64.0",
     "clsx": "2.1.1",
-    "jszip": "^3.10.2",
+    "fflate": "^0.8.3",
+    "heic2any": "^0.0.4",
     "lucide-react": "^1.52.0",
     "react": "19.2.6",
     "react-dom": "19.2.6",
-    "tailwind-merge": "3.4.0",
-    "tailwindcss": "4.1.17",
-    "vite": "7.3.2"
+    "tailwind-merge": "3.4.0"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "4.1.17",
     "@types/node": "22.19.17",
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",
-    "typescript": "5.9.3"
-  },
-  "engines": {
-    "node": ">=20"
+    "@vitejs/plugin-react": "5.1.1",
+    "tailwindcss": "4.1.17",
+    "typescript": "5.9.3",
+    "vite": "7.3.2",
+    "vite-plugin-singlefile": "2.3.0"
   }
 }

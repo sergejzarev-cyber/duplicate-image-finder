@@ -1,75 +1,155 @@
-# Dedup Studio
+# DupSweep
 
-Browser-only image duplicate finder (SHA-256). Files never leave the device.
+Локальный (без сервера и без сети) поиск и удаление дубликатов изображений в браузере.
+Точные дубликаты — по SHA-256 содержимого, визуально похожие — по перцептивному dHash 64 бит.
+Файлы никогда не покидают компьютер.
 
-## Local development
+## Быстрый старт
+
+Приложению не нужен бэкенд — только статическая отдача файлов.
+
+### Вариант 0 — без установки вообще
+
+`npm run build` собирает **один самодостаточный `dist/index.html`** (Web Worker встроен
+в бандл через `?worker&inline`). Этот файл можно сохранить куда угодно и открыть двойным
+кликом (`file://`) — поиск дубликатов и похожих работает. Удаление и `showDirectoryPicker`
+по правилам Chrome требуют secure context, поэтому на `file://` включается резервный
+режим «только поиск». Для полного режима — варианты ниже.
+
+### Режим разработки (рекомендуется)
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open `http://localhost:5173/` in Chrome/Edge/Opera.
+Затем открыть **http://localhost:5173** — вкладка должна быть открыта, пока работает команда.
+`localhost` считается защищённым контекстом, поэтому File System Access API
+(выбор папки, удаление, перемещение в `_duplicates`) работает без сертификатов.
 
-## Build
-
-```bash
-npm run build
-```
-
-Output: `dist/`
-
-## Deploy to Vercel (free)
-
-### Important project settings (if build fails with `vite: command not found`)
-
-In Vercel → Project → **Settings → General / Build & Development Settings**:
-
-| Setting | Value |
-|---|---|
-| Framework Preset | **Other** (not Vite) |
-| Build Command | `npm run build` |
-| Output Directory | `dist` |
-| Install Command | `npm install` |
-| Root Directory | `.` (repository root) |
-
-Do **not** set Build Command to bare `vite build`.
-
-### Option A — Vercel website
-
-1. Push this project to GitHub (public or private repo).
-2. Go to [https://vercel.com](https://vercel.com) → Sign up / Log in.
-3. **Add New Project** → Import the GitHub repo.
-4. Framework: **Other** (or leave blank).
-5. Build command: `npm run build`
-6. Output directory: `dist`
-7. Click **Deploy**.
-
-You get a URL like `https://dedup-studio-xxx.vercel.app`.
-
-### Option B — Vercel CLI
+### Продакшн-сборка
 
 ```bash
-npm i -g vercel
-vercel login
-vercel
+npm run build      # собирает dist/
+npm run preview    # статически отдаёт dist/ → http://localhost:4173
 ```
 
-For production:
+### Любой другой статический хостинг для dist/
 
 ```bash
-vercel --prod
+npx serve dist
+# или
+python3 -m http.server 4173 -d dist
 ```
 
-## Feedback form
+**Важно про HTTPS:** на публичном хостинге полный режим (удаление файлов) доступен
+только по `https://`. По обычному `http://` (не localhost) приложение автоматически
+переходит в резервный режим «только поиск» (список копий + «ZIP без дубликатов»).
 
-Configured in `src/config.ts` via Formspree:
+## Требования
 
-`https://formspree.io/f/xdeaonwn`
+| Условие | Полный режим (поиск + удаление) | Резервный режим (только поиск) |
+|---|---|---|
+| Браузер | Chrome, Edge, Opera | любой современный |
+| Контекст | `https://` или `localhost` | любой |
+| Окно | отдельная вкладка, не cross-origin iframe | любое |
 
-## Notes for testers
+Проверить в консоли DevTools:
 
-- Use **Chrome, Edge, or Opera**.
-- Open the site **directly** (not inside an iframe).
-- Exact duplicates = same file bytes (SHA-256). Visually similar images in different formats are not exact duplicates.
-- Deletion needs File System Access permission (HTTPS on Vercel is fine).
+```js
+window.isSecureContext         // должно быть true
+window.self === window.top     // должно быть true
+"showDirectoryPicker" in window // должно быть true
+```
+
+## Как пользоваться
+
+1. **«Выбрать папку»** — диалог с правом чтения и записи. Опция «Включая подпапки» —
+   рекурсивный обход (папка `_duplicates` пропускается).
+2. Сканирование идёт в Web Worker: сначала группировка по размеру, SHA-256 только для
+   совпавших размеров (ноль ложных срабатываний). Опционально — поиск похожих (dHash,
+   порог Хэмминга настраивается ползунком уже в результатах, без повторного сканирования).
+3. Правило «какой файл оставить»: самое высокое разрешение / самый старый /
+   самый новый / самое короткое имя. Клик по карточке переопределяет выбор вручную.
+4. **Удаление** — только после явного подтверждения: перемещение в подпапку
+   `_duplicates` (по умолчанию, восстановимо) или безвозвратно. Отчёт: сколько удалено,
+   сколько места освобождено, список ошибок.
+
+Языки интерфейса: RU / DE / EN (переключатель в шапке, запоминается).
+
+## Структура
+
+```
+src/
+  App.tsx                 // фазовый автомат: idle → scan → results → report
+  types.ts                // доменные типы
+  i18n.tsx                // словари ru/de/en + контекст
+  fs/
+    scanner.ts            // showDirectoryPicker, обход дерева, fallback-input, детектор контекста
+    deleteOps.ts          // удаление / перемещение в _duplicates
+    zipFallback.ts        // «ZIP без дубликатов» (fflate, стриминг)
+  worker/
+    hash.worker.ts        // SHA-256, dHash 9×8, union-find по Хэммингу
+    pool.ts               // пул воркеров: очередь, отмена
+  core/
+    duplicates.ts         // группировка по размеру/хешу
+    selection.ts          // правила «какой файл оставить»
+    similarRunner.ts      // пересбор групп похожих по порогу
+  hooks/useScanner.ts     // конвейер сканирования и действий
+  components/             // Header, Hero, Scanning, Results, DeleteDialog, Report
+```
+
+Технологии: TypeScript (strict), Vite + React, Tailwind CSS v4, Web Crypto API,
+File System Access API, Web Worker, fflate. Бэкенда нет — статический хостинг.
+
+## Деплой на Vercel (бесплатно, HTTPS из коробки)
+
+Vercel даёт бесплатный `https://`-домен вида `dupsweep-xxx.vercel.app` — полный режим
+(выбор папки + удаление) работает сразу, без настроек сертификатов.
+
+### Вариант А — через Vercel CLI (быстрее всего, без GitHub)
+
+```bat
+cd /d C:\Entwicklung\deduplicate
+npx vercel
+```
+
+1. При первом запуске: `Log in` → создать/открыть аккаунт (можно через GitHub/Google).
+2. На вопросы отвечать так:
+   - `Set up and deploy?` → **Y**
+   - `Which scope?` → свой аккаунт
+   - `Link to existing project?` → **N**
+   - `Project name?` → `dupsweep` (или любое)
+   - `In which directory is your code located?` → `./` (просто Enter)
+   - Остальные настройки (build command, output dir) Vercel подхватит сам из `vercel.json`.
+3. После деплоя Vercel выдаст ссылку `https://dupsweep-xxx.vercel.app` — её и рассылать.
+4. Повторный деплой после изменений: `npx vercel --prod` из той же папки.
+
+### Вариант Б — через GitHub + Dashboard (удобно для обновлений)
+
+1. Создать репозиторий на GitHub, запушить туда проект.
+2. На [vercel.com](https://vercel.com) → `Add New…` → `Project` → `Import` репозиторий.
+3. Framework Preset определится как **Vite**, `Build Command` → `npm run build`,
+   `Output Directory` → `dist`. Нажать `Deploy`.
+4. Каждый `git push` в `main` будет автоматически пересобирать и обновлять ссылку.
+
+### Важно: переменная окружения для Feedback
+
+`.env` в репозиторий не коммитится (см. `.gitignore`), поэтому после создания проекта
+на Vercel задайте её в Dashboard отдельно — иначе форма отзывов покажет
+«не подключена»:
+
+`Project → Settings → Environment Variables → Add New`:
+- Name: `VITE_FEEDBACK_ENDPOINT`
+- Value: `https://formspree.io/f/xdeaonwn`
+- Environments: отметить **Production** и **Preview**
+
+После добавления → `Deployments → … → Redeploy` (переменные применяются при сборке).
+
+### Чек-лист перед рассылкой ссылок
+
+- [ ] Открыть ссылку в Chrome в режиме инкогнито — главная без жёлтых/голубых карточек.
+- [ ] «Выбрать папку» → системный диалог открывается (значит, HTTPS + top-level ок).
+- [ ] Отправить тестовый отзыв через шапку → письмо пришло.
+- [ ] Друзьям напомнить: открывать ссылку в отдельной вкладке Chrome/Edge/Opera,
+      не внутри мессенджера (встроенные браузеры соцсетей могут резать File System API).

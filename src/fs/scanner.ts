@@ -1,100 +1,228 @@
-import type { ImageFile } from '../types';
+import type { ImageFile, ScanError } from "../types";
 
-export const IMAGE_EXTENSIONS = new Set([
-  '.jpg',
-  '.jpeg',
-  '.png',
-  '.gif',
-  '.webp',
-  '.bmp',
-  '.avif',
+export const IMAGE_EXTS = new Set([
+  "jpg",
+  "jpeg",
+  "png",
+  "gif",
+  "webp",
+  "bmp",
+  "avif",
+  // HEIC/HEIF (iPhone): включаем в скан, для пикселей конвертируем в JPEG через WASM (см. fs/heic.ts)
+  "heic",
+  "heif",
+  "hif",
 ]);
+/** расширения, требующие конвертации перед декодированием */
+export const HEIC_EXTS = new Set(["heic", "heif", "hif"]);
+/** карантинная папка пропускается при повторных сканированиях */
+export const QUARANTINE_DIR = "_duplicates";
 
-export function isImageFile(name: string): boolean {
-  const dot = name.lastIndexOf('.');
-  if (dot < 0) return false;
-  return IMAGE_EXTENSIONS.has(name.slice(dot).toLowerCase());
+export function extOf(name: string): string {
+  const i = name.lastIndexOf(".");
+  return i >= 0 ? name.slice(i + 1).toLowerCase() : "";
 }
 
-function makeId(relativePath: string, size: number, lastModified: number): string {
-  return `${relativePath}::${size}::${lastModified}`;
+export function isImageName(name: string): boolean {
+  return IMAGE_EXTS.has(extOf(name));
 }
 
-export async function collectFiles(
-  dirHandle: FileSystemDirectoryHandle,
-  includeSubfolders: boolean,
-  signal?: AbortSignal
-): Promise<ImageFile[]> {
+export function isHeicName(name: string): boolean {
+  return HEIC_EXTS.has(extOf(name));
+}
+
+export function supportsFileSystemAccess(): boolean {
+  return typeof (window as unknown as { showDirectoryPicker?: unknown }).showDirectoryPicker === "function";
+}
+
+/**
+ * Chrome запрещает file picker в cross-origin iframe
+ * («Cross origin sub frames aren't allowed to show a file picker») —
+ * типично для превью в онлайн-IDE, встроенных виджетов и т.п.
+ */
+export function isCrossOriginFrame(): boolean {
+  if (window.self === window.top) return false;
+  try {
+    void window.top!.location.href; // доступно только same-origin
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+/** ошибка вызова showDirectoryPicker в запрещённом контексте (iframe/secure-context) */
+export function isPickerSecurityError(e: unknown): boolean {
+  return (
+    (e instanceof DOMException && e.name === "SecurityError") ||
+    (e instanceof Error && /file picker|cross origin/i.test(e.message))
+  );
+}
+
+export type FsBlockReason = "none" | "insecure-context" | "cross-origin-frame" | "api-missing";
+
+/**
+ * Точная причина недоступности полного режима:
+ * insecure-context — нет HTTPS (и не localhost);
+ * cross-origin-frame — приложение встроено в чужой iframe;
+ * api-missing — браузер не Chromium (Firefox/Safari/WebKit).
+ */
+export function fsApiBlockReason(): FsBlockReason {
+  if (!supportsFileSystemAccess()) {
+    return window.isSecureContext ? "api-missing" : "insecure-context";
+  }
+  if (isCrossOriginFrame()) return "cross-origin-frame";
+  return "none";
+}
+
+export async function ensureWritePermission(handle: FileSystemDirectoryHandle): Promise<boolean> {
+  const h = handle as unknown as {
+    queryPermission?: (d: { mode: string }) => Promise<string>;
+    requestPermission?: (d: { mode: string }) => Promise<string>;
+  };
+  if (typeof h.queryPermission !== "function") return true;
+  if ((await h.queryPermission({ mode: "readwrite" })) === "granted") return true;
+  try {
+    return (await h.requestPermission?.({ mode: "readwrite" })) === "granted";
+  } catch {
+    return false;
+  }
+}
+
+export interface PickedRoot {
+  handle: FileSystemDirectoryHandle;
+  canWrite: boolean;
+}
+
+/** @returns null, если пользователь отменил диалог */
+export async function pickDirectory(): Promise<PickedRoot | null> {
+  const picker = (window as unknown as { showDirectoryPicker: (o: object) => Promise<FileSystemDirectoryHandle> })
+    .showDirectoryPicker;
+  let handle: FileSystemDirectoryHandle;
+  try {
+    handle = await picker({ id: "dupsweep", mode: "readwrite" });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") return null;
+    throw e;
+  }
+  return { handle, canWrite: await ensureWritePermission(handle) };
+}
+
+interface DirCtx {
+  dir: FileSystemDirectoryHandle;
+  prefix: string;
+}
+
+/** Обход папки. Читает только метаданные (getFile — stat), содержимое не трогает. */
+export async function scanDirectory(
+  root: FileSystemDirectoryHandle,
+  recursive: boolean,
+  signal: AbortSignal,
+  onProgress: (found: number) => void
+): Promise<{ files: ImageFile[]; errors: ScanError[]; skippedHeic: number }> {
   const files: ImageFile[] = [];
+  const errors: ScanError[] = [];
+  let skippedHeic = 0;
+  const stack: DirCtx[] = [{ dir: root, prefix: "" }];
+  const abort = () => new DOMException("Aborted", "AbortError");
 
-  async function traverse(handle: FileSystemDirectoryHandle, relativePath: string) {
-    if (signal?.aborted) return;
+  while (stack.length > 0) {
+    if (signal.aborted) throw abort();
+    const ctx = stack.pop()!;
+    const iterable = (
+      ctx.dir as unknown as { values: () => AsyncIterable<FileSystemHandle> }
+    ).values();
 
-    // File System Access API async iterator
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const iter = (handle as any).values?.() as AsyncIterable<FileSystemHandle> | undefined;
-    if (!iter) return;
-
-    for await (const entry of iter) {
-      if (signal?.aborted) return;
-
-      if (entry.kind === 'file') {
-        const fileHandle = entry as FileSystemFileHandle;
-        try {
-          const file = await fileHandle.getFile();
-          if (!isImageFile(file.name)) continue;
-          // never scan files already living under _duplicates
-          if (relativePath.split('/').includes('_duplicates')) continue;
-          const rel = relativePath ? `${relativePath}/${file.name}` : file.name;
-          files.push({
-            id: makeId(rel, file.size, file.lastModified),
-            handle: fileHandle,
-            file,
-            path: file.name,
-            name: file.name,
-            relativePath: rel,
-            size: file.size,
-            lastModified: file.lastModified,
-          });
-        } catch {
-          // inaccessible file — skip
+    let sinceTick = 0;
+    for await (const entry of iterable) {
+      if (signal.aborted) throw abort();
+      if (entry.kind === "directory") {
+        // _duplicates не спускаемся никогда: перемещённые копии не должны находиться снова.
+        // При recursive=false не спускаемся вообще никуда — карантин тем более не виден.
+        if (recursive && entry.name !== QUARANTINE_DIR) {
+          stack.push({ dir: entry as FileSystemDirectoryHandle, prefix: ctx.prefix + entry.name + "/" });
         }
-      } else if (entry.kind === 'directory') {
-        const name = entry.name;
-        // always skip our own trash folder (even if nested)
-        if (name === '_duplicates') continue;
-        if (!includeSubfolders) continue;
-        await traverse(
-          entry as FileSystemDirectoryHandle,
-          relativePath ? `${relativePath}/${name}` : name
-        );
+        continue;
+      }
+      if (entry.kind !== "file") continue;
+      if (!isImageName(entry.name)) continue;
+      const path = ctx.prefix + entry.name;
+      try {
+        const fileHandle = entry as FileSystemFileHandle;
+        const file = await fileHandle.getFile();
+        files.push({
+          id: `f${files.length}`,
+          name: entry.name,
+          path,
+          ext: extOf(entry.name),
+          size: file.size,
+          lastModified: file.lastModified,
+          handle: fileHandle,
+          parentHandle: ctx.dir,
+          blob: file,
+        });
+      } catch {
+        errors.push({ path, reason: "unreadable" });
+      }
+      if (++sinceTick % 40 === 0) {
+        onProgress(files.length);
+        // отдаём управление рендеру
+        await new Promise((r) => setTimeout(r, 0));
       }
     }
+    onProgress(files.length);
   }
-
-  await traverse(dirHandle, '');
-  return files;
+  return { files, errors, skippedHeic };
 }
 
-export function filesFromFileList(list: File[]): ImageFile[] {
-  return list
-    .filter((f) => {
-      if (!isImageFile(f.name)) return false;
-      const rel = ((f as unknown as { webkitRelativePath?: string }).webkitRelativePath) || f.name;
-      // ignore files already inside _duplicates (fallback/webkitdirectory)
-      return !rel.split(/[/\\]/).some((part) => part === '_duplicates');
-    })
-    .map((f) => {
-      const rel = ((f as unknown as { webkitRelativePath?: string }).webkitRelativePath) || f.name;
-      return {
-        id: makeId(rel, f.size, f.lastModified),
-        handle: null,
-        file: f,
-        path: f.name,
-        name: f.name,
-        relativePath: rel,
-        size: f.size,
-        lastModified: f.lastModified,
-      };
+// ---------- запасной режим (input webkitdirectory) ----------
+
+/** @returns null, если пользователь отменил диалог */
+export function pickDirectoryFallback(): Promise<File[] | null> {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.multiple = true;
+    (input as unknown as { webkitdirectory: boolean }).webkitdirectory = true;
+    input.style.position = "fixed";
+    input.style.opacity = "0";
+    input.style.pointerEvents = "none";
+    document.body.appendChild(input);
+
+    let settled = false;
+    const done = (files: File[] | null) => {
+      if (settled) return;
+      settled = true;
+      input.remove();
+      resolve(files);
+    };
+    input.addEventListener("change", () => done(Array.from(input.files ?? [])));
+    input.addEventListener("cancel", () => done(null));
+    input.click();
+  });
+}
+
+export function fromFallbackFiles(
+  all: File[],
+  recursive: boolean
+): { files: ImageFile[]; skippedHeic: number } {
+  const out: ImageFile[] = [];
+  let skippedHeic = 0;
+  for (const f of all) {
+    const rel = (f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name;
+    // _duplicates пропускаем всегда — иначе перемещённые копии находятся снова при повторном скане
+    if (rel.split("/").includes(QUARANTINE_DIR)) continue;
+    if (!isImageName(f.name)) continue;
+    // без рекурсии оставляем только файлы корня выбранной папки
+    if (!recursive && rel.split("/").length > 2) continue;
+    out.push({
+      id: `f${out.length}`,
+      name: f.name,
+      path: rel,
+      ext: extOf(f.name),
+      size: f.size,
+      lastModified: f.lastModified,
+      blob: f,
     });
+  }
+  return { files: out, skippedHeic };
 }
