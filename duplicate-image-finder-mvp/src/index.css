@@ -1,231 +1,220 @@
 @import "tailwindcss";
 
-/* Только системные шрифты: два семейства вместо четырёх, ноль внешних запросов */
 @theme {
-  --font-display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans: "Segoe UI", "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
 
 html {
-  color-scheme: light;
   scroll-behavior: smooth;
 }
 
 body {
-  background-color: #f4f1ea;
-  color: #1c1917;
+  margin: 0;
+  min-height: 100vh;
   font-family: var(--font-sans);
+  color: #0f172a;
   -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
+  background: #eef2f7;
 }
 
-::selection {
-  background: #1c1917;
-  color: #fafaf9;
+#root {
+  min-height: 100vh;
+  position: relative;
 }
 
-/* тонкие скроллбары */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: rgb(28 25 23 / 0.22) transparent;
-}
-*::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-*::-webkit-scrollbar-thumb {
-  background: rgb(28 25 23 / 0.18);
-  border-radius: 999px;
+*:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
 }
 
-/* фоновая сетка — едва заметная */
-.bg-grid {
-  background-image:
-    linear-gradient(to right, rgb(28 25 23 / 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(28 25 23 / 0.05) 1px, transparent 1px);
-  background-size: 56px 56px;
-  mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, black 25%, transparent 72%);
+.app-shell {
+  position: relative;
+  min-height: 100vh;
+  isolation: isolate;
 }
 
-/* появление блоков */
-@keyframes rise {
+/* Soft photo-mosaic feel without noisy office stock */
+.app-shell::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(900px 500px at 12% -10%, rgba(59, 130, 246, 0.18), transparent 55%),
+    radial-gradient(800px 420px at 100% 0%, rgba(139, 92, 246, 0.12), transparent 50%),
+    radial-gradient(700px 400px at 50% 100%, rgba(14, 165, 233, 0.1), transparent 55%),
+    linear-gradient(165deg, #e8eef8 0%, #f4f6fa 42%, #e9eef5 100%);
+}
+
+.app-shell::after {
+  content: none;
+}
+
+@keyframes rise-in {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
-.rise {
-  animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
 
-/* неопределённый прогресс */
-@keyframes indet {
-  from {
-    transform: translateX(-110%);
+@keyframes soft-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.25);
   }
-  to {
-    transform: translateX(320%);
+  50% {
+    box-shadow: 0 0 0 10px rgba(37, 99, 235, 0);
   }
 }
-.indet {
-  animation: indet 1.15s ease-in-out infinite;
+
+@keyframes shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 100% 50%;
+  }
 }
 
-/* нативный dialog */
-dialog.modal {
-  padding: 0;
-  background: #fffdf8;
-  color: #1c1917;
-  border: 1px solid rgb(28 25 23 / 0.1);
-  border-radius: 1.25rem;
-  width: min(92vw, 34rem);
+.anim-rise {
+  animation: rise-in 0.5s ease-out both;
+}
+
+.anim-rise-delay-1 {
+  animation: rise-in 0.5s ease-out 0.08s both;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(16px) saturate(1.1);
+  border: 1px solid rgba(255, 255, 255, 0.85);
   box-shadow:
-    0 40px 90px -24px rgb(28 25 23 / 0.35),
-    0 2px 6px rgb(28 25 23 / 0.08);
-}
-dialog.modal::backdrop {
-  background: rgb(28 25 23 / 0.45);
-  backdrop-filter: blur(4px);
-}
-dialog.modal[open] {
-  animation: rise 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+    0 1px 0 rgba(255, 255, 255, 0.9) inset,
+    0 16px 40px rgba(15, 23, 42, 0.08);
 }
 
-/* range-слайдер */
-input[type="range"].range {
-  -webkit-appearance: none;
-  appearance: none;
-  background: transparent;
-  height: 20px;
-  cursor: pointer;
+.card-soft {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
-input[type="range"].range::-webkit-slider-runnable-track {
-  height: 6px;
-  border-radius: 999px;
-  background: linear-gradient(
-    to right,
-    #047857 var(--fill, 33%),
-    rgb(28 25 23 / 0.12) var(--fill, 33%)
-  );
+
+.card-soft:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.07);
 }
-input[type="range"].range::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  margin-top: -5px;
-  height: 16px;
-  width: 16px;
-  border-radius: 999px;
-  background: #fffdf8;
-  border: 2px solid #047857;
-  box-shadow: 0 1px 4px rgb(28 25 23 / 0.25);
+
+.btn-primary {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  color: #f8fafc;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18);
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-accent {
+  background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 50%, #0ea5e9 100%);
+  background-size: 160% 160%;
+  color: #fff;
+  box-shadow: 0 10px 26px rgba(37, 99, 235, 0.28);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  animation: shimmer 7s ease infinite alternate;
+}
+
+.btn-accent:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, #9f1239 0%, #e11d48 100%);
+  color: #fff;
+  box-shadow: 0 8px 22px rgba(159, 18, 57, 0.2);
   transition: transform 0.15s ease;
 }
-input[type="range"].range::-webkit-slider-thumb:hover {
-  transform: scale(1.2);
+
+.btn-danger:hover:not(:disabled) {
+  transform: translateY(-1px);
 }
-input[type="range"].range::-moz-range-track {
-  height: 6px;
+
+.progress-track {
+  background: rgba(15, 23, 42, 0.08);
   border-radius: 999px;
-  background: rgb(28 25 23 / 0.12);
-}
-input[type="range"].range::-moz-range-progress {
-  height: 6px;
-  border-radius: 999px;
-  background: #047857;
-}
-input[type="range"].range::-moz-range-thumb {
-  height: 12px;
-  width: 12px;
-  border-radius: 999px;
-  background: #fffdf8;
-  border: 2px solid #047857;
-  box-shadow: 0 1px 4px rgb(28 25 23 / 0.25);
-}
-input[type="range"].range:focus-visible {
-  outline: 2px solid #047857;
-  outline-offset: 4px;
-  border-radius: 4px;
-}
-
-/* select в светлой теме */
-select option {
-  background: #fffdf8;
-  color: #1c1917;
-}
-
-/* уважение к reduced motion */
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-
-/* ===== Деловой редизайн: анимации ===== */
-/* Все бесконечные анимации гаснут при prefers-reduced-motion (см. выше) */
-
-/* парящие карточки поверх фото */
-@keyframes floaty {
-  0%, 100% { transform: translateY(0) rotate(var(--fl-rot, 0deg)); }
-  50% { transform: translateY(-12px) rotate(var(--fl-rot, 0deg)); }
-}
-.floaty {
-  animation: floaty 6s ease-in-out infinite;
-  will-change: transform;
-}
-.floaty-slow {
-  animation: floaty 9s ease-in-out infinite;
-  will-change: transform;
-}
-
-/* мягкий блик, пробегающий по кнопке */
-@keyframes shine {
-  0% { transform: translateX(-120%) skewX(-18deg); }
-  55%, 100% { transform: translateX(240%) skewX(-18deg); }
-}
-.btn-shine {
-  position: relative;
   overflow: hidden;
 }
-.btn-shine::after {
-  content: "";
-  position: absolute;
-  top: 0; bottom: 0;
-  width: 45%;
-  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.28), transparent);
-  animation: shine 4.5s ease-in-out infinite;
-  pointer-events: none;
+
+.progress-fill {
+  background: linear-gradient(90deg, #1d4ed8, #0ea5e9, #38bdf8);
+  background-size: 200% 100%;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+  animation: shimmer 2.2s linear infinite;
 }
 
-/* пульсирующая точка «live / локально» */
-@keyframes ping-soft {
-  0% { transform: scale(1); opacity: 0.7; }
-  80%, 100% { transform: scale(2.4); opacity: 0; }
-}
-.ping-soft {
-  animation: ping-soft 2.2s cubic-bezier(0, 0, 0.2, 1) infinite;
+.logo-mark {
+  animation: soft-pulse 3.6s ease-in-out infinite;
 }
 
-/* появление с лёгким масштабом для hero-панели */
-@keyframes hero-in {
-  from { opacity: 0; transform: translateY(22px) scale(0.985); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-.hero-in {
-  animation: hero-in 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+.header-bar {
+  background: rgba(255, 255, 255, 0.82);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.07);
+  backdrop-filter: blur(14px);
 }
 
-/* тонкая корпоративная полоска сверху */
-.biz-topline {
-  background: linear-gradient(90deg, #0f2a44 0%, #14532d 45%, #b45309 100%);
+.legal-prose p {
+  margin: 0 0 0.75rem;
+  line-height: 1.55;
+  color: #334155;
+  font-size: 0.925rem;
+}
+
+.legal-prose h3 {
+  margin: 1.25rem 0 0.4rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.legal-prose ul {
+  margin: 0 0 0.85rem 1.1rem;
+  padding: 0;
+  color: #334155;
+  font-size: 0.925rem;
+  line-height: 1.55;
+}
+
+.legal-prose li {
+  margin-bottom: 0.25rem;
+}
+
+.legal-prose a {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+.legal-prose em {
+  color: #64748b;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-accent,
+  .progress-fill,
+  .logo-mark,
+  .anim-rise,
+  .anim-rise-delay-1 {
+    animation: none !important;
+  }
 }
