@@ -10,12 +10,6 @@
       "has": [{ "type": "host", "value": "duplicate-image-finder-two.vercel.app" }],
       "destination": "https://duplicatepix.com/:path*",
       "permanent": true
-    },
-    {
-      "source": "/:path*",
-      "has": [{ "type": "host", "value": "www.duplicatepix.com" }],
-      "destination": "https://duplicatepix.com/:path*",
-      "permanent": true
     }
   ],
   "rewrites": [
