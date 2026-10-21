@@ -37,8 +37,19 @@ function detectBrowserLang(): Lang {
   return 'en';
 }
 
-export function useI18n() {
-  const [lang, setLangState] = useState<Lang>(() => detectBrowserLang());
+/** Language-specific URL paths for SEO landing pages. */
+export const LANG_PATHS: Record<Lang, string> = {
+  de: '/',
+  en: '/en/',
+  ru: '/ru/',
+};
+
+/**
+ * @param fixed - when provided (landing pages /, /en/, /ru/), the language is
+ *   locked to the URL and not auto-detected, so crawlers see one stable language.
+ */
+export function useI18n(fixed?: Lang) {
+  const [lang, setLangState] = useState<Lang>(() => fixed ?? detectBrowserLang());
 
   const setLang = useCallback((next: Lang) => {
     setLangState(next);
@@ -48,6 +59,17 @@ export function useI18n() {
       // ignore
     }
   }, []);
+
+  // Remember the language of a fixed-language page so /app etc. follow it
+  useEffect(() => {
+    if (fixed) {
+      try {
+        localStorage.setItem(STORAGE_KEY, fixed);
+      } catch {
+        // ignore
+      }
+    }
+  }, [fixed]);
 
   useEffect(() => {
     if (typeof document !== 'undefined') {

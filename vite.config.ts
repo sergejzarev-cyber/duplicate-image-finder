@@ -20,6 +20,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: path.resolve(__dirname, "index.html"),
+        en: path.resolve(__dirname, "en.html"),
+        ru: path.resolve(__dirname, "ru.html"),
         app: path.resolve(__dirname, "app.html"),
         feedback: path.resolve(__dirname, "feedback.html"),
         verify: path.resolve(__dirname, "verify.html"),

@@ -1,4 +1,4 @@
-import { useI18n } from '../i18n/useI18n';
+import { useI18n, LANG_PATHS } from '../i18n/useI18n';
 import { FeedbackModal } from '../ui/FeedbackModal';
 import { Sparkles } from 'lucide-react';
 
@@ -9,7 +9,7 @@ export function FeedbackPage() {
     <div className="app-shell min-h-screen text-slate-900">
       <header className="header-bar">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-5 py-4">
-          <a href="/" className="flex items-center gap-2 font-semibold text-slate-900">
+          <a href={LANG_PATHS[lang]} className="flex items-center gap-2 font-semibold text-slate-900">
             <Sparkles className="h-5 w-5 text-blue-700" />
             {t('brand')}
           </a>
@@ -35,7 +35,7 @@ export function FeedbackPage() {
         <div className="relative mt-6 min-h-[420px]">
           <FeedbackPageForm t={t} lang={lang} />
         </div>
-        <a href="/" className="mt-6 inline-block text-sm font-semibold text-blue-700 underline">
+        <a href={LANG_PATHS[lang]} className="mt-6 inline-block text-sm font-semibold text-blue-700 underline">
           ← {t('backHome')}
         </a>
       </main>

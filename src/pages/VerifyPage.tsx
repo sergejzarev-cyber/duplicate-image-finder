@@ -1,4 +1,4 @@
-import { useI18n } from '../i18n/useI18n';
+import { useI18n, LANG_PATHS } from '../i18n/useI18n';
 import { ShieldCheck, Sparkles } from 'lucide-react';
 
 export function VerifyPage() {
@@ -8,7 +8,7 @@ export function VerifyPage() {
     <div className="app-shell min-h-screen text-slate-900">
       <header className="header-bar">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-5 py-4">
-          <a href="/" className="flex items-center gap-2 font-semibold">
+          <a href={LANG_PATHS[lang]} className="flex items-center gap-2 font-semibold">
             <Sparkles className="h-5 w-5 text-blue-700" />
             {t('brand')}
           </a>
@@ -69,7 +69,7 @@ export function VerifyPage() {
           >
             GitHub
           </a>
-          <a href="/" className="rounded-2xl px-5 py-3 text-sm font-semibold text-blue-700 underline">
+          <a href={LANG_PATHS[lang]} className="rounded-2xl px-5 py-3 text-sm font-semibold text-blue-700 underline">
             {t('backHome')}
           </a>
         </div>

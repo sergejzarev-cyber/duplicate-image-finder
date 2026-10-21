@@ -13,6 +13,10 @@
     }
   ],
   "rewrites": [
+    { "source": "/en", "destination": "/en.html" },
+    { "source": "/en/", "destination": "/en.html" },
+    { "source": "/ru", "destination": "/ru.html" },
+    { "source": "/ru/", "destination": "/ru.html" },
     { "source": "/app", "destination": "/app.html" },
     { "source": "/app/", "destination": "/app.html" },
     { "source": "/feedback", "destination": "/feedback.html" },

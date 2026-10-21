@@ -1,4 +1,5 @@
-import { useI18n } from '../i18n/useI18n';
+import { useI18n, LANG_PATHS } from '../i18n/useI18n';
+import type { Lang } from '../i18n/dict';
 import { DONATE_URL } from '../config';
 import { Heart, MessageSquareHeart, Sparkles, ArrowRight, Play } from 'lucide-react';
 import { useState } from 'react';
@@ -6,8 +7,8 @@ import { imprintHtml, privacyHtml, contactHtml } from '../legal/content';
 
 type LegalPage = null | 'imprint' | 'privacy' | 'contact';
 
-export function LandingPage() {
-  const { lang, setLang, t, languages } = useI18n();
+export function LandingPage({ fixedLang }: { fixedLang: Lang }) {
+  const { lang, t, languages } = useI18n(fixedLang);
   const [legalPage, setLegalPage] = useState<LegalPage>(null);
 
   return (
@@ -37,20 +38,23 @@ export function LandingPage() {
             >
               {t('verifyNav')}
             </a>
-            <div className="flex rounded-full border border-slate-300 bg-white p-1 shadow-sm">
+            {/* Real links per language → separate indexable URLs with hreflang */}
+            <nav className="flex rounded-full border border-slate-300 bg-white p-1 shadow-sm" aria-label="Language">
               {languages.map((l) => (
-                <button
+                <a
                   key={l.code}
-                  type="button"
-                  onClick={() => setLang(l.code)}
+                  href={LANG_PATHS[l.code]}
+                  hrefLang={l.code}
+                  lang={l.code}
+                  aria-current={lang === l.code ? 'page' : undefined}
                   className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
                     lang === l.code ? 'bg-slate-900 text-white' : 'text-slate-700 hover:text-slate-900'
                   }`}
                 >
                   {l.code.toUpperCase()}
-                </button>
+                </a>
               ))}
-            </div>
+            </nav>
           </div>
         </div>
       </header>

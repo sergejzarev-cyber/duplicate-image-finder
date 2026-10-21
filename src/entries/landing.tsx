@@ -5,6 +5,6 @@ import { LandingPage } from '../pages/LandingPage';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <LandingPage />
+    <LandingPage fixedLang="de" />
   </StrictMode>
 );

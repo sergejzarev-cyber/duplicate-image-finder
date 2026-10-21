@@ -12,7 +12,7 @@ import { collectFiles, filesFromFileList } from './fs/scanner';
 import { openDirectoryPicker, checkFileSystemAccess } from './fs/access';
 import { buildExactGroups, buildSimilarGroups, recommendKeep, similarityLabel, debugSimilarPairs } from './core/duplicates';
 import { computeImageFingerprints } from './core/imageHash';
-import { useI18n } from './i18n/useI18n';
+import { useI18n, LANG_PATHS } from './i18n/useI18n';
 import JSZip from 'jszip';
 import {
   FolderOpen,
@@ -1296,7 +1296,7 @@ export default function ScannerApp() {
               <PrivacyBadge t={t} />
             </div>
 
-            <a href="/" className="btn-primary inline-flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold">
+            <a href={LANG_PATHS[lang]} className="btn-primary inline-flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold">
               <Home className="h-4 w-4" />
               {t('backHome')}
             </a>
@@ -1307,7 +1307,7 @@ export default function ScannerApp() {
       <footer className="border-t border-slate-200/80 bg-white/90">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm font-semibold text-slate-900">
-            <a href="/" className="hover:text-blue-700">{t('backHome')}</a>
+            <a href={LANG_PATHS[lang]} className="hover:text-blue-700">{t('backHome')}</a>
             <a href="/verify" target="_blank" rel="noopener noreferrer" className="hover:text-blue-700">
               {t('verifyNav')}
             </a>
